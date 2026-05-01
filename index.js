@@ -7,7 +7,7 @@ const adminRoutes = require('./routes/admin');
 const studentRoutes = require('./routes/student');
 
 const app = express();
-const PORT = process.env.PORT || 5000;
+const PORT = process.env.PORT || 3000; // Railway assigns PORT automatically
 const MONGO_URI = process.env.MONGO_URI;
 
 if (!MONGO_URI) {
