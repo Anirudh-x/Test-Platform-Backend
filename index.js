@@ -2,6 +2,8 @@ require('dotenv').config({ override: true }); // override any pre-existing syste
 const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
+const http = require('http');
+const { Server } = require('socket.io');
 
 const adminRoutes = require('./routes/admin');
 const studentRoutes = require('./routes/student');
@@ -36,6 +38,19 @@ app.use(cors({
 }));
 app.use(express.json());
 
+// Create HTTP server & Socket.io
+const server = http.createServer(app);
+const io = new Server(server, {
+  cors: {
+    origin: CORS_ORIGINS,
+    methods: ['GET', 'POST'],
+    credentials: true,
+  }
+});
+
+// Setup signaling logic
+require('./signaling')(io);
+
 // Health check
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
@@ -61,7 +76,7 @@ mongoose
   .connect(MONGO_URI)
   .then(() => {
     console.log('✅ Connected to MongoDB Atlas:', safeUri);
-    app.listen(PORT, () => {
+    server.listen(PORT, () => {
       console.log(`🚀 Backend server running on http://localhost:${PORT}`);
     });
   })
