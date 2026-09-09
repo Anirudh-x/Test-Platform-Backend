@@ -166,4 +166,59 @@ router.post('/submit', async (req, res) => {
   }
 });
 
+// POST /api/student/run-code
+// Executes student code in sandbox using Judge0 CE
+const LANGUAGE_MAP = {
+  python: 71,       // Python (3.8.1)
+  javascript: 63,   // JavaScript (Node.js 12.14.0)
+  cpp: 54,          // C++ (GCC 9.2.0)
+  java: 62,         // Java (OpenJDK 13.0.1)
+};
+
+router.post('/run-code', async (req, res) => {
+  try {
+    const { sourceCode, language = 'python', stdin = '' } = req.body;
+
+    if (!sourceCode && sourceCode !== '') {
+      return res.status(400).json({ success: false, error: 'sourceCode is required' });
+    }
+
+    const languageId = LANGUAGE_MAP[language.toLowerCase()] || 71;
+
+    const response = await fetch('https://ce.judge0.com/submissions?base64_encoded=false&wait=true', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        source_code: sourceCode,
+        language_id: languageId,
+        stdin: stdin || '',
+      }),
+    });
+
+    if (!response.ok) {
+      const errText = await response.text();
+      return res.status(response.status).json({ success: false, error: `Execution service error: ${errText}` });
+    }
+
+    const result = await response.json();
+    return res.json({
+      success: true,
+      stdout: result.stdout || '',
+      stderr: result.stderr || '',
+      compile_output: result.compile_output || '',
+      message: result.message || '',
+      status: result.status?.description || 'Executed',
+      statusId: result.status?.id,
+      time: result.time,
+      memory: result.memory,
+    });
+  } catch (err) {
+    console.error('Code execution error:', err);
+    res.status(500).json({ success: false, error: 'Failed to execute code' });
+  }
+});
+
 module.exports = router;
+
