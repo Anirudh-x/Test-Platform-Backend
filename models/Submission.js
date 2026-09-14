@@ -6,6 +6,8 @@ const AnswerSchema = new mongoose.Schema({
   code: { type: String, default: '' },
   language: { type: String, default: 'python' },
   timeSpent: { type: Number, default: 0 }, // seconds
+  selectedOption: { type: Number, default: null }, // index for objective question
+  isCorrect: { type: Boolean, default: null },
 }, { _id: false });
 
 const SubmissionSchema = new mongoose.Schema({
@@ -26,6 +28,11 @@ const SubmissionSchema = new mongoose.Schema({
     trim: true,
     uppercase: true,
   },
+  testType: {
+    type: String,
+    enum: ['coding', 'objective'],
+    default: 'coding',
+  },
   status: {
     type: String,
     enum: ['In Progress', 'Submitted', 'Cancelled'],
@@ -36,6 +43,18 @@ const SubmissionSchema = new mongoose.Schema({
     default: 'python',
   },
   answers: [AnswerSchema],
+  score: {
+    type: Number,
+    default: null,
+  },
+  totalMarks: {
+    type: Number,
+    default: null,
+  },
+  percentage: {
+    type: Number,
+    default: null,
+  },
   totalTime: {
     type: Number,
     default: 0, // seconds

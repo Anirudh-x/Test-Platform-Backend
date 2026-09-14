@@ -64,6 +64,7 @@ router.get('/tests', async (req, res) => {
           _id: test._id,
           title: test.title,
           testId: test.testId,
+          type: test.type || 'coding',
           duration: test.duration,
           createdDate: test.createdAt,
           totalQuestions: test.questions.length,
@@ -78,6 +79,10 @@ router.get('/tests', async (req, res) => {
             rollNo: s.rollNo,
             status: s.status,
             language: s.language,
+            testType: s.testType || test.type || 'coding',
+            score: s.score,
+            totalMarks: s.totalMarks,
+            percentage: s.percentage,
             answers: s.answers,
             totalTime: s.totalTime,
             startTime: s.startTime,
@@ -97,7 +102,7 @@ router.get('/tests', async (req, res) => {
 // POST /api/admin/tests  — create a new test
 router.post('/tests', async (req, res) => {
   try {
-    const { testId, title, duration, questions } = req.body;
+    const { testId, title, duration, questions, type = 'coding' } = req.body;
 
     if (!testId || !title) {
       return res.status(400).json({ success: false, error: 'testId and title are required' });
@@ -106,19 +111,40 @@ router.post('/tests', async (req, res) => {
       return res.status(400).json({ success: false, error: 'At least one question is required' });
     }
 
-    const mappedQuestions = questions.map((q, idx) => ({
-      id: idx + 1,
-      title: q.title,
-      description: q.description,
-      difficulty: q.difficulty || 'Medium',
-      examples: q.examples || '',
-      constraints: q.constraints || '',
-      starterCode: q.starterCode || '',
-    }));
+    const testType = type === 'objective' ? 'objective' : 'coding';
+
+    let mappedQuestions;
+    if (testType === 'objective') {
+      mappedQuestions = questions.map((q, idx) => {
+        const rawOptions = Array.isArray(q.options) ? q.options : [];
+        const options = rawOptions.map(opt => String(opt || '').trim());
+        const correctOption = typeof q.correctOption === 'number' ? q.correctOption : 0;
+
+        return {
+          id: idx + 1,
+          title: q.title.trim(),
+          description: (q.description || '').trim(),
+          difficulty: q.difficulty || 'Medium',
+          options,
+          correctOption,
+        };
+      });
+    } else {
+      mappedQuestions = questions.map((q, idx) => ({
+        id: idx + 1,
+        title: q.title.trim(),
+        description: (q.description || '').trim(),
+        difficulty: q.difficulty || 'Medium',
+        examples: q.examples || '',
+        constraints: q.constraints || '',
+        starterCode: q.starterCode || '',
+      }));
+    }
 
     const newTest = new Test({
       testId: testId.trim().toUpperCase(),
       title: title.trim(),
+      type: testType,
       duration: duration || 60,
       questions: mappedQuestions,
     });
@@ -129,6 +155,7 @@ router.post('/tests', async (req, res) => {
       id: newTest.testId,
       testId: newTest.testId,
       title: newTest.title,
+      type: newTest.type,
       duration: newTest.duration,
       createdDate: newTest.createdAt,
       totalQuestions: newTest.questions.length,
@@ -163,10 +190,13 @@ router.get('/students', async (req, res) => {
       name: s.studentName,
       rollNo: s.rollNo,
       testId: s.testId,
+      testType: s.testType || 'coding',
       status: s.status,
       language: s.language,
       answers: s.answers,
-      score: null,
+      score: s.score,
+      totalMarks: s.totalMarks,
+      percentage: s.percentage,
       totalTime: s.totalTime,
       startTime: s.startTime,
       endTime: s.endTime,

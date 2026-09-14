@@ -42,6 +42,7 @@ router.post('/login', async (req, res) => {
         studentName: name.trim(),
         rollNo: normalizedRollNo,
         testId: normalizedTestId,
+        testType: test.type || 'coding',
         status: 'In Progress',
         startTime: new Date(),
       });
@@ -54,10 +55,13 @@ router.post('/login', async (req, res) => {
           name: submission.studentName,
           rollNo: submission.rollNo,
           testId: submission.testId,
+          testType: submission.testType,
           status: submission.status,
           language: submission.language,
           answers: [],
           score: null,
+          totalMarks: null,
+          percentage: null,
           totalTime: 0,
           startTime: submission.startTime,
           endTime: null,
@@ -70,6 +74,7 @@ router.post('/login', async (req, res) => {
       testInfo: {
         testId: test.testId,
         title: test.title,
+        type: test.type || 'coding',
         duration: test.duration,
         totalQuestions: test.questions.length,
       },
@@ -91,13 +96,29 @@ router.get('/test/:testId', async (req, res) => {
       return res.status(404).json({ success: false, error: 'Test not found' });
     }
 
+    // Security: for objective tests, redact correctOption so it is not visible in devtools
+    const isObjective = test.type === 'objective';
+    const sanitizedQuestions = test.questions.map(q => {
+      if (isObjective) {
+        return {
+          id: q.id,
+          title: q.title,
+          description: q.description || '',
+          difficulty: q.difficulty || 'Medium',
+          options: q.options || [],
+        };
+      }
+      return q;
+    });
+
     res.json({
       success: true,
       test: {
         testId: test.testId,
         title: test.title,
+        type: test.type || 'coding',
         duration: test.duration,
-        questions: test.questions,
+        questions: sanitizedQuestions,
       },
     });
   } catch (err) {
@@ -133,12 +154,45 @@ router.post('/submit', async (req, res) => {
       return res.status(409).json({ success: false, error: 'Test already submitted' });
     }
 
-    // Update the submission with answers
+    // Fetch the test to check type and evaluate if objective
+    const test = await Test.findOne({ testId: normalizedTestId }).lean();
+    const isObjective = test?.type === 'objective';
+
     existing.status = 'Submitted';
-    existing.answers = answers || [];
-    existing.language = language || 'python';
     existing.totalTime = totalTime || 0;
     existing.endTime = new Date();
+
+    if (isObjective) {
+      let correctCount = 0;
+      const evaluatedAnswers = (answers || []).map(ans => {
+        const q = (test?.questions || []).find(item => item.id === ans.questionId);
+        const selectedOption = typeof ans.selectedOption === 'number' ? ans.selectedOption : null;
+        const isCorrect = Boolean(q && selectedOption !== null && selectedOption === q.correctOption);
+        if (isCorrect) {
+          correctCount++;
+        }
+        return {
+          questionId: ans.questionId,
+          questionTitle: q ? q.title : (ans.questionTitle || ''),
+          selectedOption,
+          isCorrect,
+          timeSpent: ans.timeSpent || 0,
+        };
+      });
+
+      const totalQuestions = test?.questions?.length || (answers || []).length || 1;
+      existing.score = correctCount;
+      existing.totalMarks = totalQuestions;
+      existing.percentage = Math.round((correctCount / totalQuestions) * 100);
+      existing.answers = evaluatedAnswers;
+      existing.testType = 'objective';
+      existing.language = 'objective';
+    } else {
+      existing.answers = answers || [];
+      existing.language = language || 'python';
+      existing.testType = 'coding';
+    }
+
     await existing.save();
 
     // 🔔 Notify admin panel in real-time
@@ -149,17 +203,23 @@ router.post('/submit', async (req, res) => {
         name: existing.studentName,
         rollNo: existing.rollNo,
         testId: existing.testId,
+        testType: existing.testType,
         status: existing.status,
         language: existing.language,
         answers: existing.answers,
-        score: null,
+        score: existing.score,
+        totalMarks: existing.totalMarks,
+        percentage: existing.percentage,
         totalTime: existing.totalTime,
         startTime: existing.startTime,
         endTime: existing.endTime,
       },
     });
 
-    res.json({ success: true, message: 'Test submitted successfully' });
+    res.json({
+      success: true,
+      message: 'Test submitted successfully',
+    });
   } catch (err) {
     console.error('Submit error:', err);
     res.status(500).json({ success: false, error: 'Failed to submit test' });
